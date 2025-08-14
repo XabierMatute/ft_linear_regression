@@ -1,75 +1,94 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    plot_bonus.py                                      :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: xmatute- <xmatute-@student.42.fr>          +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2025/08/14 16:53:05 by xmatute-          #+#    #+#              #
+#    Updated: 2025/08/14 17:26:02 by xmatute-         ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
 import os
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 
 DEFAULT_DATA_FILE = 'data/data.csv'
-MODEL_FILE = 'model.csv'
+DEFAULT_MODEL_FILE = 'model.csv'
 
-def calculate_metrics(km, price, theta0, theta1):
-    """Calcula el MSE y R² para evaluar la precisión del modelo."""
-    # Predicciones
-    predictions = [theta0 + theta1 * x for x in km]
+FIGSIZE = (10, 6)
 
-    # Error Cuadrático Medio (MSE)
+def calculate_MSE(predictions, price):
     mse = sum((p - a) ** 2 for p, a in zip(predictions, price)) / len(price)
+    return mse
 
-    # Coeficiente de Determinación (R²)
+def calculate_R2(predictions, price):
     mean_price = sum(price) / len(price)
     ss_total = sum((a - mean_price) ** 2 for a in price)
     ss_residual = sum((a - p) ** 2 for p, a in zip(predictions, price))
     r2 = 1 - (ss_residual / ss_total)
 
-    return mse, r2
+    return r2
 
 def main():
     print("Plotting car price data...")
-    data_file = os.getenv('DATA_FILE', DEFAULT_DATA_FILE)
+    data_file = DEFAULT_DATA_FILE
+    model_file = DEFAULT_MODEL_FILE
 
-    # Check arguments
-    if len(sys.argv) > 1:
+    if sys.argv[1:]:
+        if len(sys.argv) > 2:
+            print("Usage: python plot_bonus.py [data_file] [model_file]")
+            return
         data_file = sys.argv[1]
-    print(f"Data file: {data_file}")
+        if len(sys.argv) == 3:
+            model_file = sys.argv[2]
 
-    # Load data
-    try:
-        data = pd.read_csv(data_file)
-        km = data['km']
-        price = data['price']
-    except (FileNotFoundError, KeyError):
-        print(f"Error: Could not read data from {data_file}.")
+    if os.path.exists(data_file):
+        try:
+            data = pd.read_csv(data_file)
+            if 'km' not in data.columns or 'price' not in data.columns:
+                raise KeyError("Required columns 'km' and 'price' not found.")
+        except (FileNotFoundError, KeyError) as e:
+            print(f"Error: Could not read data from {data_file}. {e}")
+            return
+    else:
+        print(f"Error: Data file {data_file} does not exist.")
         return
+    
+    km = data['km']
+    price = data['price']
 
-    # Plot data
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=FIGSIZE)
+
     plt.scatter(km, price, color='blue', alpha=0.7, label='Data points')
 
-    # Load model and plot regression line
-    if os.path.exists(MODEL_FILE):
+    if os.path.exists(model_file):
         try:
-            with open(MODEL_FILE, 'r') as f:
+            with open(model_file, 'r') as f:
                 theta0, theta1 = map(float, f.readline().split(','))
-            # Generate regression line
-            x_line = [km.min(), km.max()]
+            x_line = [0, - theta0 / theta1] if theta1 != 0 else [km.min(), km.max()]
             y_line = [theta0 + theta1 * x for x in x_line]
             plt.plot(x_line, y_line, color='red', label='Regression Line')
 
-            # Calculate and print metrics
-            mse, r2 = calculate_metrics(km, price, theta0, theta1)
-            print(f"Mean Squared Error (MSE): {mse:.2f}")
-            print(f"R² (Coefficient of Determination): {r2:.2f}")
 
-            # Add metrics to the plot (bottom-left corner)
+            predictions = [theta0 + theta1 * x for x in km]
+
+            mse = calculate_MSE(predictions, price)
+            r2 = calculate_R2(predictions, price)
+
+            print(f"Model Metrics:\nMSE: {mse:.2f}\nR²: {r2:.2f}")
+
             metrics_text = f"MSE: {mse:.2f}\nR²: {r2:.2f}"
             plt.text(0.05, 0.05, metrics_text, transform=plt.gca().transAxes,
-                     fontsize=12, verticalalignment='bottom', bbox=dict(boxstyle="round", facecolor="white", alpha=0.5))
-
+                     fontsize=12, verticalalignment='bottom', bbox=dict(facecolor='white', alpha=0.5))
+            
         except (IOError, ValueError):
-            print(f"Warning: Could not read model from {MODEL_FILE}. Skipping regression line.")
+            print(f"Warning: Could not read model from {model_file}. Skipping regression line.")
     else:
-        print(f"Warning: {MODEL_FILE} not found. Skipping regression line.")
+        print(f"{model_file} not found. Skipping regression line.")
 
-    # Finalize plot
     plt.title('Car Price vs Mileage')
     plt.xlabel('Mileage (km)')
     plt.ylabel('Price (€)')
